@@ -1,0 +1,64 @@
+name: Python verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -q
+      - run: python -m tenantdesk demo
+      - name: Build and exercise installed wheel outside the checkout
+        run: |
+          python -m pip wheel . --no-deps -w /tmp/wheels
+          python -m venv /tmp/package-check
+          /tmp/package-check/bin/pip install /tmp/wheels/*.whl
+          cd /tmp
+          /tmp/package-check/bin/python -m tenantdesk demo
+          /tmp/package-check/bin/python -c "from tenantdesk.api import app; assert app.openapi()['paths']"
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build -t tenantdesk:ci .
+      - run: docker run --rm --entrypoint python tenantdesk:ci -m tenantdesk demo
+  postgres-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test-admin-password
+          POSTGRES_DB: tenantdesk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TENANTDESK_TEST_ADMIN_DSN: postgresql://postgres:test-admin-password@localhost:5432/tenantdesk_test
+      TENANTDESK_TEST_RUNTIME_DSN: postgresql://tenantdesk_runtime:test-runtime-password@localhost:5432/tenantdesk_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[postgres,dev]"
+      - name: Create restricted test role
+        run: |
+          python - <<'PYCODE'
+          import os, psycopg
+          with psycopg.connect(os.environ['TENANTDESK_TEST_ADMIN_DSN']) as connection:
+              connection.execute("CREATE ROLE tenantdesk_runtime LOGIN PASSWORD 'test-runtime-password' NOSUPERUSER NOBYPASSRLS")
+          PYCODE
+      - run: python -m pytest tests/test_postgres_rls.py -v
