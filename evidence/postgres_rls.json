@@ -1,0 +1,16 @@
+{
+  "verified": true,
+  "environment": "GitHub Actions PostgreSQL 16 service",
+  "tested_source_commit": "309f4de8ebc765542ddb5826b3c840677205b79c",
+  "workflow_run": "https://github.com/Swapnil-byte-798/tenantdesk/actions/runs/42881496061",
+  "job_id": 130058641105,
+  "tests_passed": 4,
+  "runtime_role": "tenantdesk_runtime NOSUPERUSER NOBYPASSRLS",
+  "checks": [
+    "Unscoped runtime connection sees no documents",
+    "Cross-tenant SELECT is filtered by the database",
+    "Cross-tenant INSERT is rejected by the database",
+    "Real PostgreSQL chat retrieves only tenant evidence"
+  ],
+  "llm_calls": 0
+}
